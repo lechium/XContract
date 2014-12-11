@@ -9,6 +9,8 @@
 #import <AppKit/AppKit.h>
 #import "XCModel.h"
 #import "XContractWindowController.h"
+#import "JRSwizzle.h"
+#import <objc/runtime.h>
 
 @interface XContract : NSObject
 {

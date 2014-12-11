@@ -95,7 +95,52 @@ static XContract *sharedPlugin;
             forKeyPath:kXContractHeartbeatTimer
                options:NSKeyValueObservingOptionNew
                context:NULL];
+    
+    static dispatch_once_t onceToken2;
+    dispatch_once(&onceToken2, ^{
+        [self swizzleScience];
+    });
+    
     return self;
+}
+
+//make sure if we have an active timer to save its settings!
+
+- (void)ourApplicationWillTerminate:(id)arg1
+{
+    LOG_SELF;
+    
+    [self ourApplicationWillTerminate:arg1];
+    if ([sharedPlugin currentTrackedProject] != nil)
+    {
+        [sharedPlugin stopTimerForProject];
+    }
+    
+    
+}
+
+- (void)swizzleScience
+{
+    Class xcAppClass = objc_getClass("IDEApplicationController");
+    NSError *theError = nil;
+    
+    Method terminateReplacement = class_getInstanceMethod([self class], @selector(ourApplicationWillTerminate:));
+    class_addMethod(xcAppClass, @selector(ourApplicationWillTerminate:), method_getImplementation(terminateReplacement), method_getTypeEncoding(terminateReplacement));
+    
+    BOOL swizzleScience = FALSE;
+    
+    swizzleScience = [xcAppClass jr_swizzleMethod:@selector(applicationWillTerminate:) withMethod:@selector(ourApplicationWillTerminate:) error:&theError];
+    
+    if (swizzleScience == TRUE)
+    {
+        NSLog(@"IDEApplicationController applicationWillTerminate: replaced!");
+    } else {
+        
+        NSLog(@"IDEApplicationController applicationWillTerminate: failed to replace with error: %@", theError);
+        
+    }
+
+    //- (void)applicationWillTerminate:(id)arg1
 }
 
 - (BOOL)setManualProjectName
@@ -285,9 +330,8 @@ static XContract *sharedPlugin;
         wc.delegate = self;
     }
     
-    NSLog(@"pref window: %@", self.windowController.preferenceWindow);
     
-    if (self.windowController.preferenceWindow == nil)
+    if (self.windowController.preferenceWindow == nil) //kludge, if the other window hasnt been show pref window is null.
     {
         [self.windowController.window makeKeyAndOrderFront:nil];
         [self.windowController.window close];

@@ -18,6 +18,7 @@
 		8904A1EA1A38F6FC00216DAE /* XContractWindowController.xib in Resources */ = {isa = PBXBuildFile; fileRef = 8904A1E81A38F6FC00216DAE /* XContractWindowController.xib */; };
 		8904A1F01A38FDB000216DAE /* NSDate+Additions.m in Sources */ = {isa = PBXBuildFile; fileRef = 8904A1ED1A38FDB000216DAE /* NSDate+Additions.m */; };
 		8904A1F11A38FDB000216DAE /* NSString+Additions.m in Sources */ = {isa = PBXBuildFile; fileRef = 8904A1EF1A38FDB000216DAE /* NSString+Additions.m */; };
+		890506761A3989DD00F0BF34 /* JRSwizzle.m in Sources */ = {isa = PBXBuildFile; fileRef = 890506751A3989DD00F0BF34 /* JRSwizzle.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -41,6 +42,8 @@
 		8904A1ED1A38FDB000216DAE /* NSDate+Additions.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "NSDate+Additions.m"; sourceTree = "<group>"; };
 		8904A1EE1A38FDB000216DAE /* NSString+Additions.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NSString+Additions.h"; sourceTree = "<group>"; };
 		8904A1EF1A38FDB000216DAE /* NSString+Additions.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "NSString+Additions.m"; sourceTree = "<group>"; };
+		890506741A3989DD00F0BF34 /* JRSwizzle.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = JRSwizzle.h; path = XContract/JRSwizzle.h; sourceTree = SOURCE_ROOT; };
+		890506751A3989DD00F0BF34 /* JRSwizzle.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = JRSwizzle.m; path = XContract/JRSwizzle.m; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -130,6 +133,8 @@
 		8904A1EB1A38FDB000216DAE /* Categories */ = {
 			isa = PBXGroup;
 			children = (
+				890506741A3989DD00F0BF34 /* JRSwizzle.h */,
+				890506751A3989DD00F0BF34 /* JRSwizzle.m */,
 				8904A1EC1A38FDB000216DAE /* NSDate+Additions.h */,
 				8904A1ED1A38FDB000216DAE /* NSDate+Additions.m */,
 				8904A1EE1A38FDB000216DAE /* NSString+Additions.h */,
@@ -208,6 +213,7 @@
 			files = (
 				8904A1F11A38FDB000216DAE /* NSString+Additions.m in Sources */,
 				8904A1F01A38FDB000216DAE /* NSDate+Additions.m in Sources */,
+				890506761A3989DD00F0BF34 /* JRSwizzle.m in Sources */,
 				8904A1D31A38F48E00216DAE /* XContract.m in Sources */,
 				8904A1E91A38F6FC00216DAE /* XContractWindowController.m in Sources */,
 				8904A1E21A38F58D00216DAE /* XCProjectSetting.m in Sources */,
@@ -335,6 +341,7 @@
 				8904A1D81A38F48E00216DAE /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
