@@ -13,6 +13,10 @@
 @interface XContract : NSObject
 {
     NSTextField *manualProjectNameField;
+    NSTimer *autoSaveTimer;
+    NSAlert *heartBeatAlert;
+    NSTimer *stillWorkingTimer;
+    NSInteger autoDismissTime;
 }
 + (instancetype)sharedPlugin;
 

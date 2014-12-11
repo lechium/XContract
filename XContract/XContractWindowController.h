@@ -11,5 +11,5 @@
 @interface XContractWindowController : NSWindowController
 
 @property (nonatomic, assign) id delegate;
-
+@property (nonatomic, strong) IBOutlet NSPanel *preferenceWindow;
 @end

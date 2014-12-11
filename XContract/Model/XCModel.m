@@ -34,10 +34,19 @@ static NSBundle *pluginBundle;
     return [[self applicationSupportFolder] stringByAppendingPathComponent:@"contracts.plist"];
 }
 
++ (BOOL)projectExists:(NSString *)projectName
+{
+    if (![[NSFileManager defaultManager] fileExistsAtPath:[self contractsDataStore]])
+        return FALSE;
+    
+    NSDictionary *projectsDict = [NSDictionary dictionaryWithContentsOfFile:[self contractsDataStore]];
+    if ([[projectsDict allKeys] containsObject:projectName]) return TRUE;
+    
+    return FALSE;
+}
+
 + (void)updateTime:(NSInteger)updatedTime forProject:(NSString *)projectName
 {
-    NSString *dataStore = [self contractsDataStore];
-    NSLog(@"dataStore: %@", dataStore);
     
     NSMutableDictionary *fullDict = [[NSMutableDictionary alloc] initWithContentsOfFile:[XCModel contractsDataStore]];
     if (fullDict == nil)
@@ -45,16 +54,13 @@ static NSBundle *pluginBundle;
     
     NSMutableDictionary *projectDict = [fullDict valueForKey:projectName];
     NSString *currentDateString = [[NSDate date] standardDateFormat];
-    NSLog(@"currentDateString: %@", currentDateString);
     if (projectDict == nil)
     {
         projectDict = [NSMutableDictionary new];
     }
    
     [projectDict setObject:[NSNumber numberWithInteger:updatedTime] forKey:currentDateString];
-    NSLog(@"projectDict: %@", projectDict);
     [fullDict setObject:projectDict forKey:projectName];
-    NSLog(@"fullDict: %@", fullDict);
     [fullDict writeToFile:[self contractsDataStore] atomically:TRUE];
         
 }
