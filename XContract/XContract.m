@@ -91,6 +91,8 @@ static XContract *sharedPlugin;
             [exportExcelItem setTarget:self];
             [xcontractMenu addItem:exportExcelItem];
             
+            [xcontractMenu addItem:[NSMenuItem separatorItem]];
+            
             NSMenuItem *showPreferencesWindowItem = [[NSMenuItem alloc] initWithTitle:@"Preferences..." action:@selector(showPreferenceWindow) keyEquivalent:@""];
             [showPreferencesWindowItem setTarget:self];
             [xcontractMenu addItem:showPreferencesWindowItem];
