@@ -12,7 +12,7 @@
 #import "JRSwizzle.h"
 #import <objc/runtime.h>
 
-@interface XContract : NSObject
+@interface XContract : NSObject <XContractWindowControllerDelegate>
 {
     NSTextField *manualProjectNameField;
     NSTimer *autoSaveTimer;

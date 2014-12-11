@@ -7,9 +7,17 @@
 //
 
 #import <Cocoa/Cocoa.h>
+#import "XCModel.h"
+
+@protocol XContractWindowControllerDelegate <NSObject>
+
+- (NSString *)currentActiveProject;
+
+@end
 
 @interface XContractWindowController : NSWindowController
 
 @property (nonatomic, assign) id delegate;
 @property (nonatomic, strong) IBOutlet NSPanel *preferenceWindow;
+
 @end

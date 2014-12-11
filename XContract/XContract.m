@@ -66,19 +66,30 @@ static XContract *sharedPlugin;
             
             NSMenu *xcontractMenu = [[NSMenu alloc] initWithTitle:@""];
             
+            //for now this window doesn't do anything, could potentially be used to
+            //add more info per project, current paid hours, hourly rate, etc...
+            
+            /*
             
             NSMenuItem *windowMenuItem = [[NSMenuItem alloc] initWithTitle:@"Show XContract window" action:@selector(showWindow) keyEquivalent:@""];
             // [actionMenuItem setKeyEquivalentModifierMask:NSControlKeyMask];
             [windowMenuItem setTarget:self];
             
             [xcontractMenu addItem:windowMenuItem];
-            NSMenuItem *startTimerItem = [[NSMenuItem alloc] initWithTitle:@"Start timer for current project" action:@selector(startTimerForProject) keyEquivalent:@""];
+            
+             */
+             
+             NSMenuItem *startTimerItem = [[NSMenuItem alloc] initWithTitle:@"Start timer for current project" action:@selector(startTimerForProject) keyEquivalent:@""];
             //  [trelloItem setKeyEquivalentModifierMask:NSControlKeyMask];
             [startTimerItem setTarget:self];
             [xcontractMenu addItem:startTimerItem];
             NSMenuItem *stopTimerItem = [[NSMenuItem alloc] initWithTitle:@"Stop timer for current project" action:@selector(stopTimerForProject) keyEquivalent:@""];
             [stopTimerItem setTarget:self];
             [xcontractMenu addItem:stopTimerItem];
+            
+            NSMenuItem *exportExcelItem = [[NSMenuItem alloc] initWithTitle:@"Export hours for current project" action:@selector(createExcelFile:) keyEquivalent:@""];
+            [exportExcelItem setTarget:self];
+            [xcontractMenu addItem:exportExcelItem];
             
             NSMenuItem *showPreferencesWindowItem = [[NSMenuItem alloc] initWithTitle:@"Preferences..." action:@selector(showPreferenceWindow) keyEquivalent:@""];
             [showPreferencesWindowItem setTarget:self];
@@ -231,6 +242,51 @@ static XContract *sharedPlugin;
     [[NSApplication sharedApplication] stopModalWithCode:NSAlertAlternateReturn];
 }
 
+/*
+ 
+ this doesnt really create an excel file, it just creates an unformatted html file with a really basic table in it
+
+ http://stackoverflow.com/questions/3587004/is-there-a-library-or-example-for-creating-excel-xlsx-files
+ 
+ based on that example, there IS a libxl library, but it cost money so it could obviously never be part of a plugin
+ 
+ there is probably some better way to do this, for now on an initial version this will have to do.
+ 
+ 
+ */
+- (IBAction)createExcelFile:(id)sender
+{
+    LOG_SELF;
+    NSString *activeProject = [XCModel currentProjectName];
+    NSLog(@"activeProject: %@", activeProject);
+    if (activeProject != nil)
+    {
+        NSURL * documentsDirectory = [NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].lastObject;
+        NSString *fileName = [NSString stringWithFormat:@"%@.xls", activeProject];
+        NSURL *file = [documentsDirectory URLByAppendingPathComponent:fileName];
+        NSMutableString *string = [[NSMutableString alloc] initWithString:@"<table><tr><td>Day</td><td>Hours</td></tr>"];
+        //NSString* string = @"<table><tr><td>Day</td><td>Hours</td></tr></table>";
+        
+        NSDictionary *projectDict = [XCModel projectDictionaryForProject:activeProject];
+        NSEnumerator *dictEnum = [projectDict keyEnumerator];
+        NSString *currentKey = nil;
+        while (currentKey = [dictEnum nextObject])
+        {
+            float seconds = [[projectDict objectForKey:currentKey] floatValue];
+            float hours = seconds / 3600;
+            [string appendFormat:@"<tr><td>%@</td><td>%f</td>", currentKey, hours];
+        }
+        [string appendString:@"</table>"];
+        
+       // NSLog(@"string: %@ to file: %@", string, file.path);
+        
+        [string writeToFile:file.path atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        
+        [[NSWorkspace sharedWorkspace] openFile:file.path];
+    }
+    
+}
+
 - (void)startTimerForProject
 {
     LOG_SELF;
@@ -303,6 +359,11 @@ static XContract *sharedPlugin;
     [XCModel updateTime:totalElapsedTimeForDate forProject:self.currentTrackedProject];
     self.priorElapsedTime = totalElapsedTimeForDate;
     self.startDate = [NSDate date];
+}
+
+- (NSString *)currentActiveProject
+{
+    return self.currentTrackedProject;
 }
 
 - (void)stopTimerForProject

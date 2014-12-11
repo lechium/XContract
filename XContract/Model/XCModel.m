@@ -45,6 +45,12 @@ static NSBundle *pluginBundle;
     return FALSE;
 }
 
++ (NSDictionary *)projectDictionaryForProject:(NSString *)projectName
+{
+    NSDictionary *fullDict = [NSDictionary dictionaryWithContentsOfFile:[XCModel contractsDataStore]];
+    return [fullDict valueForKey:projectName];
+}
+
 + (void)updateTime:(NSInteger)updatedTime forProject:(NSString *)projectName
 {
     
