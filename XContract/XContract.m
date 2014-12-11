@@ -71,15 +71,15 @@ static XContract *sharedPlugin;
             //add more info per project, current paid hours, hourly rate, etc...
             
             /*
-            
-            NSMenuItem *windowMenuItem = [[NSMenuItem alloc] initWithTitle:@"Show XContract window" action:@selector(showWindow) keyEquivalent:@""];
-            // [actionMenuItem setKeyEquivalentModifierMask:NSControlKeyMask];
-            [windowMenuItem setTarget:self];
-            
-            [xcontractMenu addItem:windowMenuItem];
-            
-             */
              
+             NSMenuItem *windowMenuItem = [[NSMenuItem alloc] initWithTitle:@"Show XContract window" action:@selector(showWindow) keyEquivalent:@""];
+             // [actionMenuItem setKeyEquivalentModifierMask:NSControlKeyMask];
+             [windowMenuItem setTarget:self];
+             
+             [xcontractMenu addItem:windowMenuItem];
+             
+             */
+            
             NSMenuItem *startTimerItem = [[NSMenuItem alloc] initWithTitle:@"Start timer for current project" action:@selector(startTimerForProject:) keyEquivalent:@""];
             //  [trelloItem setKeyEquivalentModifierMask:NSControlKeyMask];
             [startTimerItem setTarget:self];
@@ -110,13 +110,20 @@ static XContract *sharedPlugin;
                options:NSKeyValueObservingOptionNew
                context:NULL];
     
+    //you only swizzle once!
+    
     static dispatch_once_t onceToken2;
     dispatch_once(&onceToken2, ^{
+        
+        
+        //override application termination to make sure we stop any save any unsaved progress hours
         [self swizzleScience];
     });
     
     //NSWorkspaceWillSleepNotification
     //NSWorkspaceDidWakeNotification
+    
+    //monitor sleep / wake to start / stop hours.
     
     [[[NSWorkspace sharedWorkspace] notificationCenter] addObserver:self selector:@selector(didWake:) name:NSWorkspaceDidWakeNotification object:nil];
     
@@ -126,6 +133,146 @@ static XContract *sharedPlugin;
     
     return self;
 }
+
+#pragma mark core timer stop / start methods
+
+/**
+ 
+ this method is where we handle starting a timer for frontmost project.
+ 
+ */
+
+- (void)startTimerForProject:(NSString *)theProject
+{
+    LOG_SELF;
+    
+    //can only track one project at at time, show alert if we are already tracking one
+    
+    if (self.currentTrackedProject != nil)
+    {
+        NSAlert *alreadyTrackingProject = [NSAlert alertWithMessageText:@"Timer Active" defaultButton:@"OK" alternateButton:nil otherButton:nil informativeTextWithFormat:@"Currently only one project can be tracked at a time."];
+        
+        [alreadyTrackingProject runModal];
+        return;
+    }
+    
+    //this method can be called manually with our prior project (only done when waking from sleep)
+    //when this is called from a menu item the passed in parameter is NSMenuItem, we don't use that.
+    
+    if (![theProject isKindOfClass:[NSString class]])
+        self.currentTrackedProject = [XCModel currentProjectName]; //called from menu item, choose frontmost project
+    else
+        self.currentTrackedProject = theProject;
+    
+    
+    if (self.currentTrackedProject.length == 0) //we have no project, query for it manually
+    {
+        if ([self setManualProjectName] == FALSE) //if they dont enter text for project name we are going to bail.
+        {
+            NSAlert *noNameAlert = [NSAlert alertWithMessageText:@"No project name detected!" defaultButton:@"OK" alternateButton:nil otherButton:nil informativeTextWithFormat:@"Still no name chosen (blank entry) aborting start timer."];
+            [noNameAlert runModal];
+            return;
+        }
+        
+    }
+    //if we got this far we should have a project name, now check the contract plist for any details on this project
+    
+    //get the current time worked for our current day
+    self.priorElapsedTime = [XCModel currentTimeFromProjectName:self.currentTrackedProject];
+    
+    //we will use the start date to find an interval in seconds when we stop to save updated time worked
+    
+    self.startDate = [NSDate date];
+    NSLog(@"### starting timer for project name: %@ start date: %@ prior time: %li", self.currentTrackedProject, self.startDate, self.priorElapsedTime);
+    
+    //fire the timer that autosaves every 10 minutes
+    
+    autoSaveTimer = [NSTimer scheduledTimerWithTimeInterval:autoSaveInterval target:self selector:@selector(autoSaveTimer) userInfo:nil repeats:TRUE];
+    
+    //user can toggle whether or not to be prompted hourly if they are still working
+    
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:kXContractHeartbeatTimer] == TRUE)
+    {
+        stillWorkingTimer = [NSTimer scheduledTimerWithTimeInterval:autoCheckInterval target:self selector:@selector(stillWorkingHeartbeat) userInfo:nil repeats:TRUE];
+    }
+    
+    
+}
+
+/**
+ 
+ This might be fired upon xcode shutting down, computer going to sleep or manually from the user. will figure out
+ the elapsed time since we started tracking and update the proper section of our contract dictionary datasource.
+ 
+ */
+
+- (void)stopTimerForProject
+{
+    //idiot proofing
+    if (self.currentTrackedProject == nil) return;
+    
+    //how much time has passed since we started tacking
+    
+    NSTimeInterval elapsedTimeSinceStart = [[NSDate date] timeIntervalSinceDate:self.startDate];
+    
+    //add that time to any time tracked prior for the current day and get a full count of time worked today.
+    
+    NSInteger totalElapsedTimeForDate = self.priorElapsedTime + elapsedTimeSinceStart;
+    
+    NSLog(@"### stopping timer for project name: %@ start date: %@ new elapsed time: %li", self.currentTrackedProject, self.startDate, totalElapsedTimeForDate);
+    
+    //update our datamodel
+    [XCModel updateTime:totalElapsedTimeForDate forProject:self.currentTrackedProject];
+    
+    //invalidate all the auto save timers and reset to default non - tracking phase.
+    self.currentTrackedProject = nil;
+    self.startDate = nil;
+    self.priorElapsedTime = 0;
+    [autoSaveTimer invalidate];
+    autoSaveTimer = nil;
+    [stillWorkingTimer invalidate];
+    stillWorkingTimer = nil;
+}
+
+/**
+ 
+ if project name can't be detected for some reason (maybe there isnt a project window as frontmost)
+ this will allow the user to manually type in a name in an NSAlert with an aux text field view
+ 
+ */
+
+- (BOOL)setManualProjectName
+{
+    NSAlert *alertWithAux = [NSAlert alertWithMessageText:@"No project name detected!" defaultButton:@"OK" alternateButton:nil otherButton:@"Cancel" informativeTextWithFormat:@"No project name detected, please enter the project name you are tracking for."];
+    
+    manualProjectNameField = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 300, 44)];
+    [manualProjectNameField setEditable:TRUE];
+    [manualProjectNameField setBordered:TRUE];
+    
+    
+    NSView *viewTextEntry = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 340, 44)];
+    [viewTextEntry addSubview:manualProjectNameField];
+    [alertWithAux setAccessoryView:viewTextEntry];
+    
+    
+    NSModalResponse modalResp = [alertWithAux runModal];
+    switch (modalResp) {
+        case NSAlertDefaultReturn: //ok
+            self.currentTrackedProject = manualProjectNameField.stringValue;
+            if (self.currentTrackedProject.length == 0)
+                return FALSE;
+            else
+                return TRUE;
+            
+        case NSAlertOtherReturn: //cancel
+            return FALSE;
+    }
+    
+    return FALSE;
+}
+
+
+#pragma mark Sleep Handling
 
 - (void)willSleep:(NSNotification *)c
 {
@@ -167,21 +314,9 @@ static XContract *sharedPlugin;
     }
 }
 
+#pragma mark swizzles
 
-//make sure if we have an active timer to save its settings!
-
-- (void)ourApplicationWillTerminate:(id)arg1
-{
-    LOG_SELF;
-    
-    [self ourApplicationWillTerminate:arg1];
-    if ([sharedPlugin currentTrackedProject] != nil)
-    {
-        [sharedPlugin stopTimerForProject];
-    }
-    
-    
-}
+//heres where the swizzling takes place to override applicationWillTerminate: to make sure any changes are saved before xcode closes.
 
 - (void)swizzleScience
 {
@@ -203,40 +338,29 @@ static XContract *sharedPlugin;
         NSLog(@"IDEApplicationController applicationWillTerminate: failed to replace with error: %@", theError);
         
     }
-
+    
     //- (void)applicationWillTerminate:(id)arg1
 }
 
-- (BOOL)setManualProjectName
+//make sure if we have an active timer to save its settings!
+
+- (void)ourApplicationWillTerminate:(id)arg1
 {
-    NSAlert *alertWithAux = [NSAlert alertWithMessageText:@"No project name detected!" defaultButton:@"OK" alternateButton:nil otherButton:@"Cancel" informativeTextWithFormat:@"No project name detected, please enter the project name you are tracking for."];
+    LOG_SELF;
     
-    manualProjectNameField = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 300, 44)];
-    [manualProjectNameField setEditable:TRUE];
-    [manualProjectNameField setBordered:TRUE];
+    [self ourApplicationWillTerminate:arg1]; // call the original method
     
-    
-    NSView *viewTextEntry = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 340, 44)];
-    [viewTextEntry addSubview:manualProjectNameField];
-    [alertWithAux setAccessoryView:viewTextEntry];
-    
-    
-    NSModalResponse modalResp = [alertWithAux runModal];
-    switch (modalResp) {
-        case NSAlertDefaultReturn: //ok
-            self.currentTrackedProject = manualProjectNameField.stringValue;
-            if (self.currentTrackedProject.length == 0)
-                return FALSE;
-            else
-                return TRUE;
-            
-        case NSAlertOtherReturn: //cancel
-            return FALSE;
+    //used sharedPlugin rather than self, we are technically inside IDEApplicationController
+    if ([sharedPlugin currentTrackedProject] != nil)
+    {
+        //we are tracking, save changes!
+        [sharedPlugin stopTimerForProject];
     }
     
-    return FALSE;
+    
 }
 
+//unused, was just an example of how to pull an application to the front.
 + (void)bringAppToFront:(NSString *)appID
 {
     NSRunningApplication *theApp = [[NSRunningApplication runningApplicationsWithBundleIdentifier:appID] lastObject];
@@ -246,41 +370,79 @@ static XContract *sharedPlugin;
     }
 }
 
-
+//if we display an alert that is timing out the user better see it before we disable the timer!!
 - (void)bringXcodeToFront
 {
     [[NSApplication sharedApplication] activateIgnoringOtherApps:TRUE];
 }
 
+#pragma mark heartbeat & auto save timers
+
+/**
+ 
+ This method will be fired once an hour (if the user hasn't turned it off) to see if the user is still actively working
+ on a project.
+ 
+ 
+ */
+
 - (void)stillWorkingHeartbeat
 {
     LOG_SELF;
+    
+    //its an ivar because we are going to update the message text in the auto dismiss countdown.
+    
     heartBeatAlert = [NSAlert alertWithMessageText:@"Still working?" defaultButton:@"Yes" alternateButton:@"No" otherButton:nil informativeTextWithFormat:@"Are you still working on the project: %@?\n\nAuto dismissed choosing 'No' in 20 seconds...\n", self.currentTrackedProject];
     [heartBeatAlert setAlertStyle: NSInformationalAlertStyle];
+    
+    //since we automatically choose 'no' in 20 seconds, you dont want it automatically dismissed if the user isnt alerted!
+    
+    //maybe they are reseaching something on stackoverflow! ;)
+    
     [self bringXcodeToFront];
+    
+    //set up a timer to automatically dimiss the alert in 20 seconds (i feel like this should be built in somehow!!)
+    
     NSTimer *myTimer = [NSTimer timerWithTimeInterval: 20 target:self selector: @selector(killWindow:) userInfo:nil repeats:NO];
     autoDismissTime = 20;
+    
+    //need to add to runloop for modal panel mode, otherwise the timer wont fire while the modal alert is blocking.
     [[NSRunLoop currentRunLoop] addTimer:myTimer forMode:NSModalPanelRunLoopMode];
+    
+    //create another timer to update the message text with how many seconds until we dimiss
+    
     NSTimer *updateCountdownTimer = [NSTimer timerWithTimeInterval: 1 target:self selector: @selector(updateStillWorkingTimer) userInfo:nil repeats:TRUE];
+    
+    //this timer also needs to be processed in the modal runloop mode
     [[NSRunLoop currentRunLoop] addTimer:updateCountdownTimer forMode:NSModalPanelRunLoopMode];
+    
+    //show alert and process response
+    
     NSModalResponse modalResp = [heartBeatAlert runModal];
     
     switch (modalResp) {
-        case NSAlertAlternateReturn:
+        case NSAlertAlternateReturn: //no was selected
             
+            //stop project and invalidate our timers
             [self stopTimerForProject];
             [myTimer invalidate];
-              [updateCountdownTimer invalidate];
+            myTimer = nil;
+            [updateCountdownTimer invalidate];
+            updateCountdownTimer = nil;
             break;
-          
+            
         default:
             
+            //still need to invalidate our timers
             [myTimer invalidate];
+            myTimer = nil;
             [updateCountdownTimer invalidate];
+            updateCountdownTimer = nil;
             break;
     }
 }
 
+//update the alert to count down from 20
 - (void)updateStillWorkingTimer
 {
     autoDismissTime--;
@@ -288,17 +450,33 @@ static XContract *sharedPlugin;
     [heartBeatAlert setInformativeText:informativeText];
 }
 
+//this is fired when we automatically choose no after 20 seconds has elapsed
 -(void)killWindow:(NSTimer *)theTimer
 {
     LOG_SELF;
-
+    //choose alernatereturn which is equivalent of clicking no on the alert
     [[NSApplication sharedApplication] stopModalWithCode:NSAlertAlternateReturn];
 }
 
+//gets fired by autoSaveTimer every 10 minutes to update our time worked.
+- (void)autoSaveTimer
+{
+    LOG_SELF;
+    NSTimeInterval elapsedTimeSinceStart = [[NSDate date] timeIntervalSinceDate:self.startDate];
+    NSInteger totalElapsedTimeForDate = self.priorElapsedTime + elapsedTimeSinceStart;
+    
+    NSLog(@"### auto saving timer for project name: %@ start date: %@ new elapsed time: %li", self.currentTrackedProject, self.startDate, totalElapsedTimeForDate);
+    
+    [XCModel updateTime:totalElapsedTimeForDate forProject:self.currentTrackedProject];
+   
+    //need to reset prior elapsed time to be what we just saved and set a new start date to check interval from.
+    self.priorElapsedTime = totalElapsedTimeForDate;
+    self.startDate = [NSDate date];
+}
 /*
  
  this doesnt really create an excel file, it just creates an unformatted html file with a really basic table in it
-
+ 
  http://stackoverflow.com/questions/3587004/is-there-a-library-or-example-for-creating-excel-xlsx-files
  
  based on that example, there IS a libxl library, but it cost money so it could obviously never be part of a plugin
@@ -331,7 +509,7 @@ static XContract *sharedPlugin;
         }
         [string appendString:@"</table>"];
         
-       // NSLog(@"string: %@ to file: %@", string, file.path);
+        // NSLog(@"string: %@ to file: %@", string, file.path);
         
         [string writeToFile:file.path atomically:YES encoding:NSUTF8StringEncoding error:nil];
         
@@ -340,109 +518,8 @@ static XContract *sharedPlugin;
     
 }
 
-- (void)startTimerForProject:(NSString *)theProject
-{
-    LOG_SELF;
-    if (self.currentTrackedProject != nil)
-    {
-        NSAlert *alreadyTrackingProject = [NSAlert alertWithMessageText:@"Timer Active" defaultButton:@"OK" alternateButton:nil otherButton:nil informativeTextWithFormat:@"Currently only one project can be tracked at a time."];
-        
-        [alreadyTrackingProject runModal];
-        return;
-    }
-    
-    if (![theProject isKindOfClass:[NSString class]])
-        self.currentTrackedProject = [XCModel currentProjectName];
-    else
-        self.currentTrackedProject = theProject;
-    
-    
-    if (self.currentTrackedProject.length == 0)
-    {
-        if ([self setManualProjectName] == FALSE)
-        {
-            NSAlert *noNameAlert = [NSAlert alertWithMessageText:@"No project name detected!" defaultButton:@"OK" alternateButton:nil otherButton:nil informativeTextWithFormat:@"Still no name chosen (blank entry) aborting start timer."];
-            [noNameAlert runModal];
-            return;
-        }
-        
-    }
-    //if we got this far we should have a project name, now check the contract plist for any details on this project
-    self.priorElapsedTime = [XCModel currentTimeFromProjectName:self.currentTrackedProject];
-    self.startDate = [NSDate date];
-    NSLog(@"### starting timer for project name: %@ start date: %@ prior time: %li", self.currentTrackedProject, self.startDate, self.priorElapsedTime);
-    autoSaveTimer = [NSTimer scheduledTimerWithTimeInterval:autoSaveInterval target:self selector:@selector(autoSaveTimer) userInfo:nil repeats:TRUE];
-    
-    if ([[NSUserDefaults standardUserDefaults] boolForKey:kXContractHeartbeatTimer] == TRUE)
-    {
-        stillWorkingTimer = [NSTimer scheduledTimerWithTimeInterval:autoCheckInterval target:self selector:@selector(stillWorkingHeartbeat) userInfo:nil repeats:TRUE];
-    }
-    
-    
-}
 
-- (void)observeValueForKeyPath:(NSString*)keyPath ofObject:(id)object change:(NSDictionary*)change context:(void*)context
-{
-    if (object == [NSUserDefaults standardUserDefaults]) {
-        if ([keyPath isEqualToString:kXContractHeartbeatTimer]) {
-            
-            NSLog(@"change: %@", change);
-            BOOL autoCheck = [change[NSKeyValueChangeNewKey] boolValue];
-            if (autoCheck == true)
-            {
-                NSLog(@"changed to auto check on");
-                
-                stillWorkingTimer = [NSTimer scheduledTimerWithTimeInterval:autoCheckInterval target:self selector:@selector(stillWorkingHeartbeat) userInfo:nil repeats:TRUE];
-                
-            } else {
-                
-                NSLog(@"changed to auto check off");
-                
-                [stillWorkingTimer invalidate];
-                stillWorkingTimer = nil;
-            }
-            
-        }
-    }
-}
-
-- (void)autoSaveTimer
-{
-    LOG_SELF;
-    NSTimeInterval elapsedTimeSinceStart = [[NSDate date] timeIntervalSinceDate:self.startDate];
-    NSInteger totalElapsedTimeForDate = self.priorElapsedTime + elapsedTimeSinceStart;
-    
-    NSLog(@"### auto saving timer for project name: %@ start date: %@ new elapsed time: %li", self.currentTrackedProject, self.startDate, totalElapsedTimeForDate);
-    
-    [XCModel updateTime:totalElapsedTimeForDate forProject:self.currentTrackedProject];
-    self.priorElapsedTime = totalElapsedTimeForDate;
-    self.startDate = [NSDate date];
-}
-
-- (NSString *)currentActiveProject
-{
-    return self.currentTrackedProject;
-}
-
-- (void)stopTimerForProject
-{
-    
-    if (self.currentTrackedProject == nil) return;
-    
-    NSTimeInterval elapsedTimeSinceStart = [[NSDate date] timeIntervalSinceDate:self.startDate];
-    NSInteger totalElapsedTimeForDate = self.priorElapsedTime + elapsedTimeSinceStart;
-    
-    NSLog(@"### stopping timer for project name: %@ start date: %@ new elapsed time: %li", self.currentTrackedProject, self.startDate, totalElapsedTimeForDate);
-    
-    [XCModel updateTime:totalElapsedTimeForDate forProject:self.currentTrackedProject];
-    self.currentTrackedProject = nil;
-    self.startDate = nil;
-    self.priorElapsedTime = 0;
-    [autoSaveTimer invalidate];
-    autoSaveTimer = nil;
-    [stillWorkingTimer invalidate];
-    stillWorkingTimer = nil;
-}
+#pragma mark window control & window delegate methods
 
 - (void)showPreferenceWindow
 {
@@ -462,6 +539,7 @@ static XContract *sharedPlugin;
     [self.windowController.preferenceWindow makeKeyAndOrderFront:nil];
 }
 
+//currently unused
 - (void)showWindow
 {
     if (self.windowController.window.isVisible) {
@@ -475,6 +553,37 @@ static XContract *sharedPlugin;
         }
         [self.windowController.window makeKeyAndOrderFront:nil];
         
+    }
+}
+
+//delegate method from when we tried to create "excel" spreadsheet from main window.
+- (NSString *)currentActiveProject
+{
+    return self.currentTrackedProject;
+}
+
+//observe whether auto check has been chosen or not so we can invalidate or fire the timer
+- (void)observeValueForKeyPath:(NSString*)keyPath ofObject:(id)object change:(NSDictionary*)change context:(void*)context
+{
+    if (object == [NSUserDefaults standardUserDefaults]) {
+        if ([keyPath isEqualToString:kXContractHeartbeatTimer]) {
+            
+            BOOL autoCheck = [change[NSKeyValueChangeNewKey] boolValue];
+            if (autoCheck == true)
+            {
+                NSLog(@"changed to auto check on");
+                
+                stillWorkingTimer = [NSTimer scheduledTimerWithTimeInterval:autoCheckInterval target:self selector:@selector(stillWorkingHeartbeat) userInfo:nil repeats:TRUE];
+                
+            } else {
+                
+                NSLog(@"changed to auto check off");
+                
+                [stillWorkingTimer invalidate];
+                stillWorkingTimer = nil;
+            }
+            
+        }
     }
 }
 
