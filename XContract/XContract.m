@@ -426,6 +426,9 @@ static XContract *sharedPlugin;
 
 - (void)stopTimerForProject
 {
+    
+    if (self.currentTrackedProject == nil) return;
+    
     NSTimeInterval elapsedTimeSinceStart = [[NSDate date] timeIntervalSinceDate:self.startDate];
     NSInteger totalElapsedTimeForDate = self.priorElapsedTime + elapsedTimeSinceStart;
     
