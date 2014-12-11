@@ -19,6 +19,8 @@
     NSAlert *heartBeatAlert;
     NSTimer *stillWorkingTimer;
     NSInteger autoDismissTime;
+    BOOL promptOnWake;
+    NSString *lastTrackedProject;
 }
 + (instancetype)sharedPlugin;
 

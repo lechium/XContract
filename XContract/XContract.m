@@ -9,6 +9,7 @@
 #import "XContract.h"
 
 #define autoCheckInterval 3600
+#define autoSaveInterval 600
 
 static XContract *sharedPlugin;
 
@@ -79,7 +80,7 @@ static XContract *sharedPlugin;
             
              */
              
-             NSMenuItem *startTimerItem = [[NSMenuItem alloc] initWithTitle:@"Start timer for current project" action:@selector(startTimerForProject) keyEquivalent:@""];
+            NSMenuItem *startTimerItem = [[NSMenuItem alloc] initWithTitle:@"Start timer for current project" action:@selector(startTimerForProject:) keyEquivalent:@""];
             //  [trelloItem setKeyEquivalentModifierMask:NSControlKeyMask];
             [startTimerItem setTarget:self];
             [xcontractMenu addItem:startTimerItem];
@@ -114,8 +115,58 @@ static XContract *sharedPlugin;
         [self swizzleScience];
     });
     
+    //NSWorkspaceWillSleepNotification
+    //NSWorkspaceDidWakeNotification
+    
+    [[[NSWorkspace sharedWorkspace] notificationCenter] addObserver:self selector:@selector(didWake:) name:NSWorkspaceDidWakeNotification object:nil];
+    
+    [[[NSWorkspace sharedWorkspace] notificationCenter] addObserver:self selector:@selector(willSleep:) name:NSWorkspaceWillSleepNotification object:nil];
+    
+    promptOnWake = FALSE;
+    
     return self;
 }
+
+- (void)willSleep:(NSNotification *)c
+{
+    LOG_SELF;
+    if (self.currentActiveProject != nil)
+    {
+        lastTrackedProject = self.currentActiveProject;
+        [self stopTimerForProject];
+        promptOnWake = TRUE;
+    }
+}
+
+
+- (void)didWake:(NSNotification *)c
+{
+    LOG_SELF;
+    if (promptOnWake == TRUE)
+    {
+        [self bringXcodeToFront];
+        NSAlert *alreadyTrackingProject = [NSAlert alertWithMessageText:@"Restart timer?" defaultButton:@"Yes" alternateButton:@"No" otherButton:nil informativeTextWithFormat:@"We automatically stopped the timer upon sleep, do you want to restart it for the project: %@?", lastTrackedProject];
+        
+        NSModalResponse theResponse = [alreadyTrackingProject runModal];
+        switch (theResponse) {
+            case NSAlertDefaultReturn:
+                
+                [self startTimerForProject:lastTrackedProject];
+                lastTrackedProject = nil;
+                promptOnWake = false;
+                break;
+                
+            case NSAlertAlternateReturn:
+                lastTrackedProject = nil;
+                promptOnWake = false;
+                break;
+                
+            default:
+                break;
+        }
+    }
+}
+
 
 //make sure if we have an active timer to save its settings!
 
@@ -289,7 +340,7 @@ static XContract *sharedPlugin;
     
 }
 
-- (void)startTimerForProject
+- (void)startTimerForProject:(NSString *)theProject
 {
     LOG_SELF;
     if (self.currentTrackedProject != nil)
@@ -300,7 +351,12 @@ static XContract *sharedPlugin;
         return;
     }
     
-    self.currentTrackedProject = [XCModel currentProjectName];
+    if (![theProject isKindOfClass:[NSString class]])
+        self.currentTrackedProject = [XCModel currentProjectName];
+    else
+        self.currentTrackedProject = theProject;
+    
+    
     if (self.currentTrackedProject.length == 0)
     {
         if ([self setManualProjectName] == FALSE)
@@ -315,7 +371,7 @@ static XContract *sharedPlugin;
     self.priorElapsedTime = [XCModel currentTimeFromProjectName:self.currentTrackedProject];
     self.startDate = [NSDate date];
     NSLog(@"### starting timer for project name: %@ start date: %@ prior time: %li", self.currentTrackedProject, self.startDate, self.priorElapsedTime);
-    autoSaveTimer = [NSTimer scheduledTimerWithTimeInterval:1800 target:self selector:@selector(autoSaveTimer) userInfo:nil repeats:TRUE];
+    autoSaveTimer = [NSTimer scheduledTimerWithTimeInterval:autoSaveInterval target:self selector:@selector(autoSaveTimer) userInfo:nil repeats:TRUE];
     
     if ([[NSUserDefaults standardUserDefaults] boolForKey:kXContractHeartbeatTimer] == TRUE)
     {
