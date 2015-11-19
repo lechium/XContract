@@ -43,6 +43,61 @@ static XContract *sharedPlugin;
     return sharedPlugin;
 }
 
+- (void)XContractDelayedSetup
+{
+    
+    NSMenuItem *menuItem = [[NSApp mainMenu] itemWithTitle:@"Product"];
+    if (menuItem) {
+        [[menuItem submenu] addItem:[NSMenuItem separatorItem]];
+        
+        NSMenuItem *xcMenuItem = [[NSMenuItem alloc] init];
+        [xcMenuItem setTitle:@"XContract"];
+        
+        NSMenu *xcontractMenu = [[NSMenu alloc] initWithTitle:@""];
+        
+        //for now this window doesn't do anything, could potentially be used to
+        //add more info per project, current paid hours, hourly rate, etc...
+        
+        /*
+         
+         NSMenuItem *windowMenuItem = [[NSMenuItem alloc] initWithTitle:@"Show XContract window" action:@selector(showWindow) keyEquivalent:@""];
+         // [actionMenuItem setKeyEquivalentModifierMask:NSControlKeyMask];
+         [windowMenuItem setTarget:self];
+         
+         [xcontractMenu addItem:windowMenuItem];
+         
+         */
+        
+        NSMenuItem *startTimerItem = [[NSMenuItem alloc] initWithTitle:@"Start timer for current project" action:@selector(startTimerForProject:) keyEquivalent:@""];
+        //  [trelloItem setKeyEquivalentModifierMask:NSControlKeyMask];
+        [startTimerItem setTarget:self];
+        [xcontractMenu addItem:startTimerItem];
+        NSMenuItem *stopTimerItem = [[NSMenuItem alloc] initWithTitle:@"Stop timer for current project" action:@selector(stopTimerForProject) keyEquivalent:@""];
+        [stopTimerItem setTarget:self];
+        [xcontractMenu addItem:stopTimerItem];
+        
+        NSMenuItem *exportExcelItem = [[NSMenuItem alloc] initWithTitle:@"Export hours for current project" action:@selector(createExcelFile:) keyEquivalent:@""];
+        [exportExcelItem setTarget:self];
+        [xcontractMenu addItem:exportExcelItem];
+        
+        [xcontractMenu addItem:[NSMenuItem separatorItem]];
+        
+        NSMenuItem *showPreferencesWindowItem = [[NSMenuItem alloc] initWithTitle:@"Preferences..." action:@selector(showPreferenceWindow) keyEquivalent:@""];
+        [showPreferencesWindowItem setTarget:self];
+        [xcontractMenu addItem:showPreferencesWindowItem];
+        
+        [xcMenuItem setSubmenu:xcontractMenu];
+        [[menuItem submenu] addItem:xcMenuItem];
+    }
+    static dispatch_once_t onceToken2;
+    dispatch_once(&onceToken2, ^{
+        
+        
+        //override application termination to make sure we stop any save any unsaved progress hours
+        [self swizzleScience];
+    });
+}
+
 - (id)initWithBundle:(NSBundle *)plugin
 {
     if (self = [super init]) {
@@ -57,51 +112,9 @@ static XContract *sharedPlugin;
         }
         
         // Create menu items, initialize UI, etc.
-        
-        NSMenuItem *menuItem = [[NSApp mainMenu] itemWithTitle:@"Product"];
-        if (menuItem) {
-            [[menuItem submenu] addItem:[NSMenuItem separatorItem]];
-            
-            NSMenuItem *xcMenuItem = [[NSMenuItem alloc] init];
-            [xcMenuItem setTitle:@"XContract"];
-            
-            NSMenu *xcontractMenu = [[NSMenu alloc] initWithTitle:@""];
-            
-            //for now this window doesn't do anything, could potentially be used to
-            //add more info per project, current paid hours, hourly rate, etc...
-            
-            /*
-             
-             NSMenuItem *windowMenuItem = [[NSMenuItem alloc] initWithTitle:@"Show XContract window" action:@selector(showWindow) keyEquivalent:@""];
-             // [actionMenuItem setKeyEquivalentModifierMask:NSControlKeyMask];
-             [windowMenuItem setTarget:self];
-             
-             [xcontractMenu addItem:windowMenuItem];
-             
-             */
-            
-            NSMenuItem *startTimerItem = [[NSMenuItem alloc] initWithTitle:@"Start timer for current project" action:@selector(startTimerForProject:) keyEquivalent:@""];
-            //  [trelloItem setKeyEquivalentModifierMask:NSControlKeyMask];
-            [startTimerItem setTarget:self];
-            [xcontractMenu addItem:startTimerItem];
-            NSMenuItem *stopTimerItem = [[NSMenuItem alloc] initWithTitle:@"Stop timer for current project" action:@selector(stopTimerForProject) keyEquivalent:@""];
-            [stopTimerItem setTarget:self];
-            [xcontractMenu addItem:stopTimerItem];
-            
-            NSMenuItem *exportExcelItem = [[NSMenuItem alloc] initWithTitle:@"Export hours for current project" action:@selector(createExcelFile:) keyEquivalent:@""];
-            [exportExcelItem setTarget:self];
-            [xcontractMenu addItem:exportExcelItem];
-            
-            [xcontractMenu addItem:[NSMenuItem separatorItem]];
-            
-            NSMenuItem *showPreferencesWindowItem = [[NSMenuItem alloc] initWithTitle:@"Preferences..." action:@selector(showPreferenceWindow) keyEquivalent:@""];
-            [showPreferencesWindowItem setTarget:self];
-            [xcontractMenu addItem:showPreferencesWindowItem];
-            
-            [xcMenuItem setSubmenu:xcontractMenu];
-            [[menuItem submenu] addItem:xcMenuItem];
-        }
+       
     }
+    
     
     NSUserDefaults* prefs = [NSUserDefaults standardUserDefaults];
     
@@ -112,13 +125,7 @@ static XContract *sharedPlugin;
     
     //you only swizzle once!
     
-    static dispatch_once_t onceToken2;
-    dispatch_once(&onceToken2, ^{
-        
-        
-        //override application termination to make sure we stop any save any unsaved progress hours
-        [self swizzleScience];
-    });
+    
     
     //NSWorkspaceWillSleepNotification
     //NSWorkspaceDidWakeNotification
@@ -130,7 +137,7 @@ static XContract *sharedPlugin;
     [[[NSWorkspace sharedWorkspace] notificationCenter] addObserver:self selector:@selector(willSleep:) name:NSWorkspaceWillSleepNotification object:nil];
     
     promptOnWake = FALSE;
-    
+    [NSTimer scheduledTimerWithTimeInterval:8 target:self selector:@selector(XContractDelayedSetup) userInfo:nil repeats:FALSE];
     return self;
 }
 
