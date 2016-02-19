@@ -373,6 +373,7 @@ static XContract *sharedPlugin;
     NSRunningApplication *theApp = [[NSRunningApplication runningApplicationsWithBundleIdentifier:appID] lastObject];
     if (theApp != nil)
     {
+        [@"" stringByReplacingOccurrencesOfString:@"" withString:@""];
         [theApp activateWithOptions:NSApplicationActivateAllWindows];
     }
 }
